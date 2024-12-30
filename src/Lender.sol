@@ -82,6 +82,7 @@ contract Lender is Ownable {
     /// can only be called by the owner
     /// @param _fee the new fee
     function setLenderFee(uint256 _fee) external onlyOwner {
+        // q what if the fee is 0? 
         if (_fee > 5000) revert FeeTooHigh();
         lenderFee = _fee;
     }
@@ -90,6 +91,7 @@ contract Lender is Ownable {
     /// can only be called by the owner
     /// @param _fee the new fee
     function setBorrowerFee(uint256 _fee) external onlyOwner {
+        // q what if the fee is 0? 
         if (_fee > 500) revert FeeTooHigh();
         borrowerFee = _fee;
     }
@@ -98,6 +100,7 @@ contract Lender is Ownable {
     /// can only be called by the owner
     /// @param _feeReceiver the new fee receiver
     function setFeeReceiver(address _feeReceiver) external onlyOwner {
+        // q what if the address is 0? 
         feeReceiver = _feeReceiver;
     }
 
@@ -149,6 +152,7 @@ contract Lender is Ownable {
 
         if (p.poolBalance > currentBalance) {
             // if new balance > current balance then transfer the difference from the lender
+            // q what if transfer returns false instead of reverting? shouldn't it use safeTransferFrom?
             IERC20(p.loanToken).transferFrom(
                 p.lender,
                 address(this),
@@ -210,6 +214,7 @@ contract Lender is Ownable {
     function updateMaxLoanRatio(bytes32 poolId, uint256 maxLoanRatio) external {
         if (pools[poolId].lender != msg.sender) revert Unauthorized();
         if (maxLoanRatio == 0) revert PoolConfig();
+        // q can it produce premature liquidations?
         pools[poolId].maxLoanRatio = maxLoanRatio;
         emit PoolMaxLoanRatioUpdated(poolId, maxLoanRatio);
     }
@@ -262,6 +267,7 @@ contract Lender is Ownable {
             _updatePoolBalance(poolId, pools[poolId].poolBalance - debt);
             pools[poolId].outstandingLoans += debt;
             // calculate the fees
+            // 50/10000 = 0,005 so 0,5% 
             uint256 fees = (debt * borrowerFee) / 10000;
             // transfer fees
             IERC20(loan.loanToken).transfer(feeReceiver, fees);
@@ -314,6 +320,8 @@ contract Lender is Ownable {
             pools[poolId].outstandingLoans -= loan.debt;
 
             // transfer the loan tokens from the borrower to the pool
+            // q what if transfer returns false instead of reverting? shouldn't it use safeTransferFrom?
+            // q if that happens then attacker can get collateral for free.
             IERC20(loan.loanToken).transferFrom(
                 msg.sender,
                 address(this),
@@ -323,7 +331,7 @@ contract Lender is Ownable {
             IERC20(loan.loanToken).transferFrom(
                 msg.sender,
                 feeReceiver,
-                protocolInterest
+                protocolInterest// q shouldn't it be calculated using the borrower fee?
             );
             // transfer the collateral tokens from the contract to the borrower
             IERC20(loan.collateralToken).transfer(
@@ -475,6 +483,7 @@ contract Lender is Ownable {
         uint256 currentAuctionRate = (MAX_INTEREST_RATE * timeElapsed) /
             loan.auctionLength;
         // validate the rate
+        //q what if loan.interestRate is lower than pools[poolId].interestRate, should be unfair to the borrower?
         if (pools[poolId].interestRate > currentAuctionRate) revert RateTooHigh();
         // calculate the interest
         (uint256 lenderInterest, uint256 protocolInterest) = _calculateInterest(
@@ -589,6 +598,7 @@ contract Lender is Ownable {
     /// can only be called by the borrower
     /// @param refinances a struct of all desired debt positions to be refinanced
     function refinance(Refinance[] calldata refinances) public {
+        // explanation: debt and collateral are the values for the new loan in the destiny pool 
         for (uint256 i = 0; i < refinances.length; i++) {
             uint256 loanId = refinances[i].loanId;
             bytes32 poolId = refinances[i].poolId;
@@ -635,7 +645,7 @@ contract Lender is Ownable {
             // now lets deduct our tokens from the new pool
             _updatePoolBalance(poolId, pools[poolId].poolBalance - debt);
             pools[poolId].outstandingLoans += debt;
-
+            // q what if debtToPay is equal to debt?
             if (debtToPay > debt) {
                 // we owe more in debt so we need the borrower to give us more loan tokens
                 // transfer the loan tokens from the borrower to the contract
@@ -721,7 +731,9 @@ contract Lender is Ownable {
         Loan memory l
     ) internal view returns (uint256 interest, uint256 fees) {
         uint256 timeElapsed = block.timestamp - l.startTimestamp;
+        // 100000/10000= 10 and 10 is 10x so 1000% which is the max interest rate 
         interest = (l.interestRate * l.debt * timeElapsed) / 10000 / 365 days;
+        // 1000/10000 = 0,1 so 10%
         fees = (lenderFee * interest) / 10000;
         interest -= fees;
     }
