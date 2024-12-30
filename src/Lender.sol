@@ -100,7 +100,7 @@ contract Lender is Ownable {
     /// can only be called by the owner
     /// @param _feeReceiver the new fee receiver
     function setFeeReceiver(address _feeReceiver) external onlyOwner {
-        // q what if the address is 0? 
+        // q what if the address is 0? .,testingcomment
         feeReceiver = _feeReceiver;
     }
 
